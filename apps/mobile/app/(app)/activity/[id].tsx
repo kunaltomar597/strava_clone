@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,11 +6,12 @@ import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import { FeedMapThumbnail } from "@/components/FeedMapThumbnail";
+import { RouteMap } from "@/components/RouteMap";
+import { ActivityChart, type ActivityChartPoint } from "@/components/ActivityChart";
 import { useTheme } from "@/theme/useTheme";
 import { spacing, typeScale } from "@/theme/tokens";
 import { formatDistance, formatDuration, formatElevation, formatPace } from "@/lib/format";
-import { useActivity } from "@/features/activity/useActivity";
+import { useActivity, useActivityStreams } from "@/features/activity/useActivity";
 import { useAddComment, useComments } from "@/features/comments/useComments";
 import { useToggleKudos } from "@/features/feed/useKudos";
 
@@ -19,10 +20,25 @@ export default function ActivityDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: activity, isPending } = useActivity(id);
+  const { data: streams } = useActivityStreams(id);
   const { data: comments } = useComments(id);
   const addComment = useAddComment(id);
   const toggleKudos = useToggleKudos();
   const [commentText, setCommentText] = useState("");
+
+  const routeCoordinates = useMemo(() => {
+    if (!streams) return [];
+    return streams.lat_e7.map((latE7, i) => ({ lat: latE7 / 1e7, lng: streams.lng_e7[i]! / 1e7 }));
+  }, [streams]);
+
+  const chartData = useMemo<ActivityChartPoint[]>(() => {
+    if (!streams) return [];
+    return streams.distance_m.map((distanceM, i) => ({
+      distanceKm: distanceM / 1000,
+      elevationM: streams.altitude_m[i] ?? 0,
+      paceMps: streams.speed_mps[i] ?? 0,
+    }));
+  }, [streams]);
 
   if (isPending) {
     return (
@@ -48,9 +64,9 @@ export default function ActivityDetailScreen() {
         {author?.display_name} · {new Date(activity.started_at).toLocaleString()}
       </Text>
 
-      {activity.summary_polyline ? (
+      {routeCoordinates.length >= 2 ? (
         <View style={{ marginTop: spacing.md }}>
-          <FeedMapThumbnail summaryPolyline={activity.summary_polyline} height={220} />
+          <RouteMap coordinates={routeCoordinates} height={220} />
         </View>
       ) : null}
 
@@ -71,19 +87,28 @@ export default function ActivityDetailScreen() {
         </Text>
       ) : null}
 
-      <Button
-        label={`👏 Kudos (${activity.kudos_count})`}
-        variant="secondary"
-        onPress={() =>
-          toggleKudos.mutate({
-            activityId: activity.id,
-            // Detail view doesn't track has_kudoed locally yet; always attempts
-            // to give kudos here — a duplicate is a harmless idempotent no-op
-            // enforced by the kudos table's primary key.
-            hasKudoed: false,
-          })
-        }
-      />
+      {chartData.length >= 2 ? (
+        <View style={{ marginTop: spacing.lg, gap: spacing.md }}>
+          <ActivityChart data={chartData} metric="elevation" />
+          <ActivityChart data={chartData} metric="pace" />
+        </View>
+      ) : null}
+
+      <View style={{ marginTop: spacing.lg }}>
+        <Button
+          label={`👏 Kudos (${activity.kudos_count})`}
+          variant="secondary"
+          onPress={() =>
+            toggleKudos.mutate({
+              activityId: activity.id,
+              // Detail view doesn't track has_kudoed locally yet; always attempts
+              // to give kudos here — a duplicate is a harmless idempotent no-op
+              // enforced by the kudos table's primary key.
+              hasKudoed: false,
+            })
+          }
+        />
+      </View>
 
       <Text style={[typeScale.title, { color: colors.textPrimary, marginTop: spacing.lg }]}>
         Comments ({activity.comment_count})

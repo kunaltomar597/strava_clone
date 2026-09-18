@@ -27,16 +27,19 @@ closes them.
 ## Phase 2 — App shell, design system, maps
 - [x] Design tokens, core components (Button, Card, StatBlock, Avatar, TextField, EmptyState),
       native tabs.
-- [ ] **[CODE]** No `@rnmapbox/maps` `<MapView>` yet — the Maps tab is a permission-primer
-      placeholder (see its own doc comment). Wiring in a real map needs a Mapbox token to test
-      against.
-- [ ] **[HUMAN]** Mapbox account + public token (`EXPO_PUBLIC_MAPBOX_TOKEN`).
+- [x] `@rnmapbox/maps` wired in: `LiveMap` (location puck, follow mode, live route line) and
+      `RouteMap` (privacy-windowed route, start/finish markers, camera fit-to-bounds) as shared
+      components per the master plan, plus a real Maps tab (style switch, recenter). Both fall
+      back to a placeholder without a token rather than crashing.
+- [ ] **[HUMAN]** Mapbox account + public token (`EXPO_PUBLIC_MAPBOX_TOKEN`) — nothing renders
+      without one; this genuinely could not be visually verified without an account or a device.
 
 ## Phase 3 — Recording engine and activity math
 - [x] `packages/core`'s full pipeline (filter, Kalman smooth, auto-pause, elevation, splits,
       best efforts, polyline, privacy trimming), tested against synthetic fixtures.
 - [x] `LocationSource` interface, `ReplaySource`, `ExpoLocationSource`, the state machine, local
-      SQLite persistence, Record UI.
+      SQLite persistence, Record UI with the map-or-stats toggle (LiveMap unmounts entirely when
+      stats are shown, matching the plan's "nothing renders in the background" battery rule).
 - [ ] **[HUMAN]** Field-test on a real device — nothing here has run outside `tsc`/`vitest`.
 
 ## Phase 4 — Background hardening
@@ -51,9 +54,8 @@ closes them.
 ## Phase 5 — Upload, ingest, activity detail
 - [x] Schema (activities/streams/routes/photos/privacy_zones), RLS, `upsert_processed_activity`,
       `ingest-activity` Edge Function, outbox upload flow, activity detail screen with comments.
-- [ ] **[CODE]** No pace/elevation charts with scrubbing yet (Victory Native) — splits are
-      computed server-side (`splits_metric`/`splits_imperial` on `activities`) but not yet
-      rendered as a chart in the app.
+- [x] Scrubbable elevation and pace charts (Victory Native + Skia) on activity detail, backed by
+      `get_activity_streams()`; a real `RouteMap` replaces the earlier static thumbnail there.
 - [ ] **[HUMAN]** Verify an activity recorded in airplane mode actually syncs once back online,
       on a real device.
 
@@ -64,9 +66,9 @@ closes them.
 ## Phase 7 — Home feed, kudos, comments
 - [x] `get_home_feed`, FlashList feed, optimistic kudos, comment thread, pull-to-refresh,
       infinite scroll.
-- [ ] **[CODE]** No offline persisted-query cache wired up yet (TanStack Query's default
-      in-memory cache only) — the master plan calls for MMKV persistence so the feed is
-      readable offline.
+- [x] Offline persisted-query cache (MMKV-backed `PersistQueryClientProvider`), scoped to the
+      feed/profile/activity/notification queries the master plan names — not search results or
+      one-off RPCs.
 - [ ] **[HUMAN]** Load-test the feed query against a seeded dataset of realistic size once a
       real project exists; the query plan was designed against the index but not measured.
 
@@ -80,9 +82,8 @@ closes them.
       credentials configured in your EAS/Expo project).
 
 ## Phase 9 — Progress and records
-- [x] `get_profile_totals`, You tab totals, best-efforts + PR detection/notification triggers.
-- [ ] **[CODE]** No dedicated best-efforts/PR list screen yet — PRs are detected and notified,
-      but there's nowhere in the app to browse your personal records list.
+- [x] `get_profile_totals`, You tab totals, best-efforts + PR detection/notification triggers,
+      and a personal-records list screen (You → Personal records).
 
 ## Phase 10 — Native polish
 - [x] Audio split cues (expo-speech), opt-in keep-screen-on, accessibility labels on stats.

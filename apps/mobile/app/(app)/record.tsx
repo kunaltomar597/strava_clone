@@ -6,6 +6,7 @@ import type { SportType } from "@stride/core";
 import { Button } from "@/components/Button";
 import { TextField } from "@/components/TextField";
 import { StatBlock, StatRow } from "@/components/StatBlock";
+import { LiveMap } from "@/components/LiveMap";
 import { useTheme } from "@/theme/useTheme";
 import { spacing, typeScale } from "@/theme/tokens";
 import { formatDistance, formatDuration, formatPace } from "@/lib/format";
@@ -28,6 +29,10 @@ export default function RecordScreen() {
   // Opt-in per the master plan (power-hungry extras default off); useful
   // for a bike mount where the screen would otherwise lock mid-ride.
   const [keepScreenOn, setKeepScreenOn] = useState(false);
+  // Map and stats are mutually exclusive rather than layered, so the native
+  // map fully unmounts (and stops drawing) while stats-only is shown — the
+  // master plan's own battery strategy: "nothing renders in the background".
+  const [showMap, setShowMap] = useState(false);
 
   const isIdle = recorder.state === "idle";
   const isAcquiring = recorder.state === "acquiring";
@@ -107,43 +112,67 @@ export default function RecordScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + spacing.lg }]}>
-      {isAcquiring ? (
-        <Text style={[typeScale.body, { color: colors.textSecondary, textAlign: "center" }]}>
-          {recorder.gpsAccuracyM == null
-            ? "Acquiring GPS signal…"
-            : `Accuracy: ${Math.round(recorder.gpsAccuracyM)}m — ${canStart ? "ready to start" : "getting a better fix…"}`}
-        </Text>
-      ) : null}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {showMap ? (
+        <View style={styles.mapContainer}>
+          <LiveMap coordinates={recorder.routeCoordinates} />
+          <View style={[styles.mapOverlay, { top: insets.top + spacing.md, backgroundColor: colors.surface }]}>
+            <StatRow>
+              <StatBlock label="Distance" value={formatDistance(recorder.stats?.distanceM ?? 0, "metric")} />
+              <StatBlock label="Time" value={formatDuration(recorder.stats?.movingTimeS ?? 0)} />
+            </StatRow>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.statsContainer, { paddingTop: insets.top + spacing.lg }]}>
+          {isAcquiring ? (
+            <Text style={[typeScale.body, { color: colors.textSecondary, textAlign: "center" }]}>
+              {recorder.gpsAccuracyM == null
+                ? "Acquiring GPS signal…"
+                : `Accuracy: ${Math.round(recorder.gpsAccuracyM)}m — ${canStart ? "ready to start" : "getting a better fix…"}`}
+            </Text>
+          ) : null}
 
-      <View style={{ marginTop: spacing.xl }}>
-        <StatBlock
-          label="Distance"
-          value={formatDistance(recorder.stats?.distanceM ?? 0, "metric")}
-          align="center"
+          <View style={{ marginTop: spacing.xl }}>
+            <StatBlock
+              label="Distance"
+              value={formatDistance(recorder.stats?.distanceM ?? 0, "metric")}
+              align="center"
+            />
+          </View>
+          <StatRow>
+            <StatBlock label="Time" value={formatDuration(recorder.stats?.movingTimeS ?? 0)} />
+            <StatBlock label="Pace" value={formatPace(recorder.stats?.avgPaceMps ?? 0, "metric")} />
+          </StatRow>
+
+          <View style={styles.keepAwakeRow}>
+            <Text style={[typeScale.body, { color: colors.textSecondary }]}>Keep screen on</Text>
+            <Switch
+              value={keepScreenOn}
+              onValueChange={setKeepScreenOn}
+              accessibilityLabel="Keep screen on while recording"
+            />
+          </View>
+
+          {recorder.state === "auto_paused" ? (
+            <Text style={[typeScale.bodyBold, { color: colors.warning, textAlign: "center", marginTop: spacing.md }]}>
+              Auto-paused
+            </Text>
+          ) : null}
+        </View>
+      )}
+
+      <View
+        style={[
+          styles.controls,
+          { paddingBottom: insets.bottom + spacing.md, backgroundColor: showMap ? colors.background : undefined },
+        ]}
+      >
+        <Button
+          label={showMap ? "Show stats" : "Show map"}
+          variant="ghost"
+          onPress={() => setShowMap((v) => !v)}
         />
-      </View>
-      <StatRow>
-        <StatBlock label="Time" value={formatDuration(recorder.stats?.movingTimeS ?? 0)} />
-        <StatBlock label="Pace" value={formatPace(recorder.stats?.avgPaceMps ?? 0, "metric")} />
-      </StatRow>
-
-      <View style={styles.keepAwakeRow}>
-        <Text style={[typeScale.body, { color: colors.textSecondary }]}>Keep screen on</Text>
-        <Switch
-          value={keepScreenOn}
-          onValueChange={setKeepScreenOn}
-          accessibilityLabel="Keep screen on while recording"
-        />
-      </View>
-
-      {recorder.state === "auto_paused" ? (
-        <Text style={[typeScale.bodyBold, { color: colors.warning, textAlign: "center", marginTop: spacing.md }]}>
-          Auto-paused
-        </Text>
-      ) : null}
-
-      <View style={{ marginTop: spacing.xxl, gap: spacing.sm }}>
         {isAcquiring ? (
           <Button label="Start" onPress={() => void recorder.start()} disabled={!canStart} />
         ) : isPaused ? (
@@ -165,7 +194,6 @@ export default function RecordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
   },
   center: {
     flex: 1,
@@ -177,5 +205,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: spacing.lg,
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  mapOverlay: {
+    position: "absolute",
+    left: spacing.md,
+    right: spacing.md,
+    borderRadius: 12,
+    padding: spacing.sm,
+  },
+  statsContainer: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  controls: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
   },
 });

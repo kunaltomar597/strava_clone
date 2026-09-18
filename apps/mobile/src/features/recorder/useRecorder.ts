@@ -4,6 +4,7 @@ import * as Speech from "expo-speech";
 import {
   LiveStatsTracker,
   defaultAutoPauseOptions,
+  type LatLng,
   type LiveStats,
   type RawFix,
   type SportType,
@@ -21,6 +22,8 @@ export interface UseRecorderResult {
   stats: LiveStats | null;
   gpsAccuracyM: number | null;
   recordingId: string | null;
+  /** The route so far, for LiveMap — grows as fixes arrive, reset on each new recording. */
+  routeCoordinates: LatLng[];
   openRecord: (sport: SportType) => Promise<void>;
   start: () => Promise<void>;
   pause: () => Promise<void>;
@@ -51,6 +54,7 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
   const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
 
   const trackerRef = useRef<LiveStatsTracker | null>(null);
   const seqRef = useRef(0);
@@ -78,6 +82,7 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
       const id = Crypto.randomUUID();
       setSport(selectedSport);
       setRecordingId(id);
+      setRouteCoordinates([]);
       trackerRef.current = new LiveStatsTracker(defaultAutoPauseOptions(selectedSport));
       seqRef.current = 0;
       eventSeqRef.current = 0;
@@ -154,6 +159,7 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
       const snapshot = trackerRef.current.addFix(fix);
       setStats(snapshot);
       setGpsAccuracyM(fix.hAcc ?? null);
+      setRouteCoordinates((prev) => [...prev, { lat: fix.lat, lng: fix.lng }]);
 
       if (audioCuesEnabled && snapshot.distanceM >= nextSplitBoundaryRef.current) {
         const splitTimeS = snapshot.movingTimeS - lastSplitMovingTimeSRef.current;
@@ -179,5 +185,19 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
     return unsubscribe;
   }, [source, recordingId, audioCuesEnabled, splitDistanceM]);
 
-  return { state, sport, stats, gpsAccuracyM, recordingId, openRecord, start, pause, resume, finish, save, discard };
+  return {
+    state,
+    sport,
+    stats,
+    gpsAccuracyM,
+    recordingId,
+    routeCoordinates,
+    openRecord,
+    start,
+    pause,
+    resume,
+    finish,
+    save,
+    discard,
+  };
 }

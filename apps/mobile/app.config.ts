@@ -80,6 +80,11 @@ const config: ExpoConfig = {
         },
       },
     ],
+    // No RNMapboxMapsDownloadToken: Mapbox's own current plugin types say
+    // it's no longer required for the installed SDK version — the master
+    // plan's mention of an EAS-only secret download token describes an
+    // older Mapbox requirement.
+    "@rnmapbox/maps",
   ],
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
