@@ -1,0 +1,69 @@
+// @ts-check
+import js from "@eslint/js";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
+import prettierConfig from "eslint-config-prettier";
+
+export default [
+  {
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.expo/**",
+      "**/ios/**",
+      "**/android/**",
+      "**/*.gpx",
+    ],
+  },
+  js.configs.recommended,
+  {
+    files: ["**/scripts/**/*.mjs", "**/*.config.js", "**/*.config.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        __dirname: "readonly",
+      },
+    },
+  },
+  {
+    // Edge Functions run on Deno, not Node — a different global set.
+    files: ["supabase/functions/**/*.ts"],
+    languageOptions: {
+      globals: {
+        Deno: "readonly",
+        Response: "readonly",
+        Request: "readonly",
+        Blob: "readonly",
+        DecompressionStream: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
+        crypto: "readonly",
+        fetch: "readonly",
+        console: "readonly",
+      },
+    },
+  },
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "no-unused-vars": "off",
+    },
+  },
+  prettierConfig,
+];

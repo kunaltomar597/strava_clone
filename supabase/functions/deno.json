@@ -1,0 +1,9 @@
+{
+  "unstable": ["sloppy-imports"],
+  "imports": {
+    "@stride/core": "../../packages/core/src/index.ts",
+    "@stride/contracts": "../../packages/contracts/src/index.ts",
+    "zod": "npm:zod@^3.24.1",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.47.10"
+  }
+}

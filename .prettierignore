@@ -1,0 +1,7 @@
+node_modules
+dist
+.expo
+ios
+android
+pnpm-lock.yaml
+*.gpx
