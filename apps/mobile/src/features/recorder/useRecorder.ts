@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Crypto from "expo-crypto";
+import * as Speech from "expo-speech";
 import {
   LiveStatsTracker,
   defaultAutoPauseOptions,
@@ -8,6 +9,7 @@ import {
   type SportType,
 } from "@stride/core";
 import type { RecordingEventContract } from "@stride/contracts";
+import { formatDuration, formatPace } from "@/lib/format";
 import { appendEvent, appendFixes, createRecording, loadFixes, updateRecordingState } from "./pointWriter";
 import { nextRecorderState, shouldTrackLocation, type RecorderEvent } from "./stateMachine";
 import type { LocationSource, RecordingState } from "./types";
@@ -28,6 +30,12 @@ export interface UseRecorderResult {
   discard: () => Promise<void>;
 }
 
+export interface UseRecorderOptions {
+  /** Announces a split every `splitDistanceM` via expo-speech. Default: on, every 1km. */
+  audioCuesEnabled?: boolean;
+  splitDistanceM?: number;
+}
+
 /**
  * Wires the pure state machine to real I/O: a LocationSource, the local
  * SQLite point writer, and packages/core's LiveStatsTracker for on-screen
@@ -35,7 +43,9 @@ export interface UseRecorderResult {
  * machine, the recorder UI, and packages/core all stay independently
  * testable.
  */
-export function useRecorder(source: LocationSource): UseRecorderResult {
+export function useRecorder(source: LocationSource, options: UseRecorderOptions = {}): UseRecorderResult {
+  const { audioCuesEnabled = true, splitDistanceM = 1000 } = options;
+
   const [state, setState] = useState<RecordingState>("idle");
   const [sport, setSport] = useState<SportType>("run");
   const [stats, setStats] = useState<LiveStats | null>(null);
@@ -48,6 +58,8 @@ export function useRecorder(source: LocationSource): UseRecorderResult {
   const eventsRef = useRef<RecordingEventContract[]>([]);
   const stateRef = useRef<RecordingState>("idle");
   stateRef.current = state;
+  const nextSplitBoundaryRef = useRef(splitDistanceM);
+  const lastSplitMovingTimeSRef = useRef(0);
 
   const dispatch = useCallback((event: RecorderEvent) => {
     setState((current) => nextRecorderState(current, event) ?? current);
@@ -70,11 +82,13 @@ export function useRecorder(source: LocationSource): UseRecorderResult {
       seqRef.current = 0;
       eventSeqRef.current = 0;
       eventsRef.current = [];
+      nextSplitBoundaryRef.current = splitDistanceM;
+      lastSplitMovingTimeSRef.current = 0;
       await createRecording(id, selectedSport, Date.now());
       dispatch("OPEN_RECORD");
       await source.start(selectedSport);
     },
-    [source, dispatch],
+    [source, dispatch, splitDistanceM],
   );
 
   const start = useCallback(async () => {
@@ -141,6 +155,18 @@ export function useRecorder(source: LocationSource): UseRecorderResult {
       setStats(snapshot);
       setGpsAccuracyM(fix.hAcc ?? null);
 
+      if (audioCuesEnabled && snapshot.distanceM >= nextSplitBoundaryRef.current) {
+        const splitTimeS = snapshot.movingTimeS - lastSplitMovingTimeSRef.current;
+        const splitNumber = Math.round(nextSplitBoundaryRef.current / splitDistanceM);
+        const splitSpeedMps = splitTimeS > 0 ? splitDistanceM / splitTimeS : 0;
+        lastSplitMovingTimeSRef.current = snapshot.movingTimeS;
+        nextSplitBoundaryRef.current += splitDistanceM;
+        // Speaks over whatever's playing rather than pausing it, but expo-speech
+        // has no explicit "duck" option — on iOS this may briefly interrupt
+        // music depending on the other app's audio session category.
+        Speech.speak(`Split ${splitNumber}: ${formatDuration(splitTimeS)}, ${formatPace(splitSpeedMps, "metric")}`);
+      }
+
       const seq = seqRef.current++;
       void appendFixes(recordingId, seq, [fix]);
 
@@ -151,7 +177,7 @@ export function useRecorder(source: LocationSource): UseRecorderResult {
       });
     });
     return unsubscribe;
-  }, [source, recordingId]);
+  }, [source, recordingId, audioCuesEnabled, splitDistanceM]);
 
   return { state, sport, stats, gpsAccuracyM, recordingId, openRecord, start, pause, resume, finish, save, discard };
 }

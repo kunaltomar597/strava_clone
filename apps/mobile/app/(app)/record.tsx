@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as KeepAwake from "expo-keep-awake";
 import type { SportType } from "@stride/core";
 import { Button } from "@/components/Button";
 import { TextField } from "@/components/TextField";
@@ -10,6 +11,8 @@ import { spacing, typeScale } from "@/theme/tokens";
 import { formatDistance, formatDuration, formatPace } from "@/lib/format";
 import { useRecorder } from "@/features/recorder/useRecorder";
 import { ExpoLocationSource } from "@/features/recorder/ExpoLocationSource";
+
+const KEEP_AWAKE_TAG = "record-screen";
 
 const SPORTS: SportType[] = ["run", "ride", "walk", "hike"];
 
@@ -22,12 +25,26 @@ export default function RecordScreen() {
   const insets = useSafeAreaInsets();
   const recorder = useRecorder(locationSource);
   const [name, setName] = useState("");
+  // Opt-in per the master plan (power-hungry extras default off); useful
+  // for a bike mount where the screen would otherwise lock mid-ride.
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
 
   const isIdle = recorder.state === "idle";
   const isAcquiring = recorder.state === "acquiring";
   const isRecording = recorder.state === "recording" || recorder.state === "auto_paused";
   const isPaused = recorder.state === "paused";
   const isFinishing = recorder.state === "finishing";
+
+  useEffect(() => {
+    if (keepScreenOn && !isIdle && !isFinishing) {
+      KeepAwake.activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+    } else {
+      KeepAwake.deactivateKeepAwake(KEEP_AWAKE_TAG);
+    }
+    return () => {
+      KeepAwake.deactivateKeepAwake(KEEP_AWAKE_TAG);
+    };
+  }, [keepScreenOn, isIdle, isFinishing]);
 
   const canStart = isAcquiring && recorder.gpsAccuracyM != null && recorder.gpsAccuracyM <= 20;
 
@@ -111,6 +128,15 @@ export default function RecordScreen() {
         <StatBlock label="Pace" value={formatPace(recorder.stats?.avgPaceMps ?? 0, "metric")} />
       </StatRow>
 
+      <View style={styles.keepAwakeRow}>
+        <Text style={[typeScale.body, { color: colors.textSecondary }]}>Keep screen on</Text>
+        <Switch
+          value={keepScreenOn}
+          onValueChange={setKeepScreenOn}
+          accessibilityLabel="Keep screen on while recording"
+        />
+      </View>
+
       {recorder.state === "auto_paused" ? (
         <Text style={[typeScale.bodyBold, { color: colors.warning, textAlign: "center", marginTop: spacing.md }]}>
           Auto-paused
@@ -145,5 +171,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  keepAwakeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: spacing.lg,
   },
 });

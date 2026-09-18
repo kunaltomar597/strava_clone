@@ -12,12 +12,18 @@ export interface StatBlockProps {
 export function StatBlock({ label, value, align = "left" }: StatBlockProps) {
   const { colors } = useTheme();
   return (
-    <View style={{ alignItems: align === "center" ? "center" : "flex-start" }}>
-      <Text style={[typeScale.statValue, { color: colors.textPrimary }]} accessibilityRole="text">
+    <View
+      style={{ alignItems: align === "center" ? "center" : "flex-start" }}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <Text style={[typeScale.statValue, { color: colors.textPrimary }]} importantForAccessibility="no">
         {value}
       </Text>
       <Text
         style={[typeScale.statLabel, { color: colors.textSecondary, marginTop: spacing.xs, textTransform: "uppercase" }]}
+        importantForAccessibility="no"
       >
         {label}
       </Text>
