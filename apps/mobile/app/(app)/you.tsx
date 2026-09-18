@@ -70,6 +70,7 @@ export default function YouScreen() {
           variant="secondary"
           onPress={() => router.push("/notifications")}
         />
+        <Button label="Settings" variant="secondary" onPress={() => router.push("/settings")} />
       </View>
 
       <View style={{ marginTop: spacing.xxl }}>
