@@ -7,12 +7,14 @@ import { Stack } from "expo-router";
 import { queryClient } from "@/lib/queryClient";
 import { startAuthListener, useAuthStore } from "@/state/authStore";
 import { useNeedsOnboarding } from "@/features/auth/useNeedsOnboarding";
+import { usePushRegistration } from "@/features/notifications/usePushRegistration";
 
 void SplashScreen.preventAutoHideAsync();
 
 function AppNavigator() {
   const session = useAuthStore((s) => s.session);
   const { needsOnboarding, isLoading: onboardingCheckLoading } = useNeedsOnboarding();
+  usePushRegistration();
 
   // Signed in but we don't know yet whether onboarding is needed: keep the
   // splash screen's content hidden rather than flashing the main app and

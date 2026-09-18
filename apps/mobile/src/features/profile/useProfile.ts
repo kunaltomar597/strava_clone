@@ -16,6 +16,18 @@ export function useMyProfile() {
   });
 }
 
+export function useProfileByUsername(username: string | undefined) {
+  return useQuery({
+    queryKey: ["profile-by-username", username],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles").select("*").eq("username", username!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!username,
+  });
+}
+
 export type ProfileTotalsPeriod = "week" | "month" | "year";
 
 export function useProfileTotals(period: ProfileTotalsPeriod) {

@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
@@ -8,13 +9,16 @@ import { useTheme } from "@/theme/useTheme";
 import { spacing, typeScale } from "@/theme/tokens";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { useMyProfile, useProfileTotals } from "@/features/profile/useProfile";
+import { useUnreadNotificationCount } from "@/features/notifications/useNotifications";
 import { supabase } from "@/lib/supabase";
 
 export default function YouScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { data: profile } = useMyProfile();
   const { data: weeklyTotals } = useProfileTotals("week");
+  const { data: unreadCount } = useUnreadNotificationCount();
 
   const thisWeek = weeklyTotals?.[weeklyTotals.length - 1];
   const lastFourWeeks = weeklyTotals?.slice(-4) ?? [];
@@ -58,6 +62,15 @@ export default function YouScreen() {
       <Card style={{ marginTop: spacing.sm }}>
         <StatBlock label="Distance" value={formatDistance(monthDistanceM, "metric")} />
       </Card>
+
+      <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+        <Button label="Find people" variant="secondary" onPress={() => router.push("/search")} />
+        <Button
+          label={unreadCount ? `Notifications (${unreadCount})` : "Notifications"}
+          variant="secondary"
+          onPress={() => router.push("/notifications")}
+        />
+      </View>
 
       <View style={{ marginTop: spacing.xxl }}>
         <Button label="Sign out" variant="ghost" onPress={() => void supabase.auth.signOut()} />
