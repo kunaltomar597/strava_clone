@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @stride/core run test
+
+  typecheck-edge-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck every Edge Function
+        working-directory: supabase/functions
+        run: |
+          for dir in */; do
+            fn="${dir%/}"
+            [ -f "$fn/index.ts" ] || continue
+            echo "::group::$fn"
+            deno check --config deno.json "$fn/index.ts"
+            echo "::endgroup::"
+          done
+
+  # Runs every migration and the full pgTAP suite against a real local
+  # Supabase stack. GitHub Actions runners have Docker, so this covers the
+  # one migration (the pgmq/pg_cron notification queue) that this repo's
+  # own development environment couldn't validate locally — see the note
+  # in supabase/migrations/20260101000028_notification_queue.sql.
+  test-database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - run: supabase db reset
+      - run: supabase test db

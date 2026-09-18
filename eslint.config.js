@@ -45,6 +45,33 @@ export default [
     },
   },
   {
+    // app.config.ts is loaded by Node (via Metro/expo-cli's config
+    // resolver), not bundled into the app itself.
+    files: ["apps/mobile/app.config.ts"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+      },
+    },
+  },
+  {
+    // React Native's JS runtime (Hermes) exposes browser-like globals,
+    // some via polyfills this app installs (react-native-get-random-values).
+    files: ["apps/mobile/src/**/*.ts", "apps/mobile/src/**/*.tsx", "apps/mobile/app/**/*.tsx"],
+    languageOptions: {
+      globals: {
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        crypto: "readonly",
+        console: "readonly",
+        __DEV__: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: tsParser,
