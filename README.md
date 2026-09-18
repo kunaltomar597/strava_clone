@@ -6,6 +6,12 @@ A Strava-style fitness tracker: Expo (React Native) + Supabase (Postgres/PostGIS
 Full architecture, rationale and phased build plan: the master plan document this repo was
 built from (`docs/master-plan.md` if you've copied it in, otherwise see the original doc).
 
+See `docs/release-checklist.md` for exactly what's done vs. what still needs a human (accounts,
+purchases, a real device) before this could actually ship, and `docs/security-review.md` for
+the RLS/function/storage security review. `docs/privacy-policy-draft.md` and
+`docs/terms-of-service-draft.md` are starting drafts for a lawyer to finalize, not final
+documents.
+
 ## Monorepo layout
 
 ```
