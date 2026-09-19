@@ -1,5 +1,6 @@
 import * as Location from "expo-location";
 import type { RawFix, SportType } from "@stride/core";
+import { dismissRecordingNotification, presentOrUpdateRecordingNotification } from "./recordingNotification";
 import type { LocationSource, RecorderStatus } from "./types";
 
 /**
@@ -17,7 +18,10 @@ import type { LocationSource, RecorderStatus } from "./types";
  * periods today; it is not a guaranteed drop-in replacement for
  * TransistorSource's reliability during the section 4 field-test matrix
  * (60 minutes locked, swipe-away, etc.) without further hardening —
- * exactly the gap TransistorSource exists to close.
+ * exactly the gap TransistorSource exists to close. It does, however,
+ * raise a real ongoing Android notification while tracking (see
+ * `recordingNotification.ts`), which gives the OS one more honest signal
+ * that this process wants to keep running.
  */
 export class ExpoLocationSource implements LocationSource {
   private subscription: Location.LocationSubscription | null = null;
@@ -33,6 +37,7 @@ export class ExpoLocationSource implements LocationSource {
     }
 
     this.tracking = true;
+    await presentOrUpdateRecordingNotification("Starting…");
     this.subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
@@ -64,6 +69,7 @@ export class ExpoLocationSource implements LocationSource {
     this.subscription?.remove();
     this.subscription = null;
     this.segment++;
+    await dismissRecordingNotification();
   }
 
   onFix(listener: (fix: RawFix) => void): () => void {
@@ -81,9 +87,8 @@ export class ExpoLocationSource implements LocationSource {
 
   async clearPersistedFixes(): Promise<void> {}
 
-  async updateNotificationText(_text: string): Promise<void> {
-    // A persistent Android notification for this source is Phase 4 work
-    // (expo-task-manager + a foreground service); no-op until then.
+  async updateNotificationText(text: string): Promise<void> {
+    await presentOrUpdateRecordingNotification(text);
   }
 
   async getStatus(): Promise<RecorderStatus> {

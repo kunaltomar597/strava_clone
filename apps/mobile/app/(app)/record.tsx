@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import * as KeepAwake from "expo-keep-awake";
 import type { SportType } from "@stride/core";
 import { Button } from "@/components/Button";
@@ -12,6 +13,7 @@ import { spacing, typeScale } from "@/theme/tokens";
 import { formatDistance, formatDuration, formatPace } from "@/lib/format";
 import { useRecorder } from "@/features/recorder/useRecorder";
 import { ExpoLocationSource } from "@/features/recorder/ExpoLocationSource";
+import { LOCAL_FLAGS, getFlag, setFlag } from "@/lib/localFlags";
 
 const KEEP_AWAKE_TAG = "record-screen";
 
@@ -24,6 +26,7 @@ const locationSource = new ExpoLocationSource();
 export default function RecordScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const recorder = useRecorder(locationSource);
   const [name, setName] = useState("");
   // Opt-in per the master plan (power-hungry extras default off); useful
@@ -33,6 +36,17 @@ export default function RecordScreen() {
   // map fully unmounts (and stops drawing) while stats-only is shown — the
   // master plan's own battery strategy: "nothing renders in the background".
   const [showMap, setShowMap] = useState(false);
+  // One-time nudge toward Settings → Battery optimization, since a fresh
+  // install has never seen it; dismissing or following it never shows it
+  // again from here (it's always still reachable from Settings).
+  const [showBatteryTip, setShowBatteryTip] = useState(
+    () => Platform.OS === "android" && !getFlag(LOCAL_FLAGS.seenBatteryGuideTip),
+  );
+
+  function dismissBatteryTip() {
+    setFlag(LOCAL_FLAGS.seenBatteryGuideTip, true);
+    setShowBatteryTip(false);
+  }
 
   const isIdle = recorder.state === "idle";
   const isAcquiring = recorder.state === "acquiring";
@@ -107,6 +121,36 @@ export default function RecordScreen() {
             />
           ))}
         </View>
+        {showBatteryTip ? (
+          <View
+            style={[
+              styles.tipBanner,
+              { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: spacing.lg },
+            ]}
+          >
+            <Text style={[typeScale.body, { color: colors.textPrimary }]}>
+              Long recordings can be cut short by your phone's battery saver. Check the recommended setting for
+              your device.
+            </Text>
+            <View style={styles.tipBannerActions}>
+              <Button
+                label="Not now"
+                variant="ghost"
+                fullWidth={false}
+                onPress={dismissBatteryTip}
+              />
+              <Button
+                label="Show me"
+                variant="ghost"
+                fullWidth={false}
+                onPress={() => {
+                  dismissBatteryTip();
+                  router.push("/battery-optimization");
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -159,6 +203,12 @@ export default function RecordScreen() {
               Auto-paused
             </Text>
           ) : null}
+
+          {recorder.lastGap ? (
+            <Text style={[typeScale.caption, { color: colors.warning, textAlign: "center", marginTop: spacing.sm }]}>
+              Signal gap detected — about {recorder.lastGap.durationS}s of tracking may be missing.
+            </Text>
+          ) : null}
         </View>
       )}
 
@@ -205,6 +255,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: spacing.lg,
+  },
+  tipBanner: {
+    marginTop: spacing.xl,
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  tipBannerActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: spacing.sm,
   },
   mapContainer: {
     flex: 1,

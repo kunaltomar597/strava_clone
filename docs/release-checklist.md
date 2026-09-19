@@ -43,13 +43,28 @@ closes them.
 - [ ] **[HUMAN]** Field-test on a real device — nothing here has run outside `tsc`/`vitest`.
 
 ## Phase 4 — Background hardening
-- [ ] **[CODE/HUMAN]** This phase is almost entirely device-dependent: the iOS background mode
-      is declared in `app.config.ts`, but the "never let iOS auto-pause", vendor battery-manager
-      guide, and gap-recovery UX all need real-device iteration to get right. Budget real time
-      for this phase specifically — it's the master plan's own stated highest-risk area.
+- [x] Vendor battery-manager guide: a real Settings → Battery optimization screen
+      (`app/(app)/battery-optimization.tsx`) detects the device brand via `expo-device` and shows
+      OEM-specific steps (Xiaomi/Redmi/POCO, OPPO/realme/OnePlus, Vivo, Huawei/Honor, Samsung,
+      ASUS, plus a generic fallback), with a one-time tip surfaced from the Record screen and a
+      permanent link from Settings. Exact menu wording is described as "look for something like
+      X" rather than an exact tap path, since it couldn't be verified against a real device here.
+- [x] Gap-recovery UX (client side): `useRecorder` now detects fix-delivery gaps over 15s —
+      including the cold-start case where the app was killed and relaunched into an in-progress
+      recording — logs a real `gap` event (the schema already supported this; nothing previously
+      emitted it), and surfaces a transient "signal gap detected" banner on the Record screen.
+- [x] Android persistent live-stats notification: `ExpoLocationSource` now raises and updates a
+      real ongoing (`sticky`) Android notification via `recordingNotification.ts` while recording,
+      showing live distance/time, instead of the previous no-op stub.
+- [ ] **[CODE/HUMAN]** What's left here is genuinely device-dependent: the "never let iOS
+      auto-pause" behavior needs real-device iteration to confirm, and none of the three items
+      above (the guide's exact wording, the gap threshold, the notification's actual behavior
+      under OS battery throttling) has been run on a real phone. Budget real time for this phase
+      specifically — it's the master plan's own stated highest-risk area.
 - [ ] **[HUMAN]** The full field-test matrix (60 min locked, incoming call, tunnel, airplane
       mode, swipe-away, force-quit, reboot mid-run) on multiple real devices, including one
-      aggressive-battery-management vendor (Xiaomi/Oppo/etc).
+      aggressive-battery-management vendor (Xiaomi/Oppo/etc) — this is what the new battery guide
+      and gap banner should be judged against.
 
 ## Phase 5 — Upload, ingest, activity detail
 - [x] Schema (activities/streams/routes/photos/privacy_zones), RLS, `upsert_processed_activity`,
@@ -87,9 +102,11 @@ closes them.
 
 ## Phase 10 — Native polish
 - [x] Audio split cues (expo-speech), opt-in keep-screen-on, accessibility labels on stats.
+- [x] Android persistent live-stats notification (see Phase 4 — implemented alongside the rest of
+      background hardening since it's the same `LocationSource` surface).
 - [ ] **[CODE/HUMAN]** No Live Activity / Dynamic Island (needs an Expo config plugin + a real
-      device to see it), no Android persistent live-stats notification, no custom app icon or
-      splash screen (still Expo's default template assets).
+      device to see it), no custom app icon or splash screen (still Expo's default template
+      assets).
 
 ## Phase 11 — Hardening and release
 - [x] `docs/security-review.md` (RLS coverage table, function security, storage/rate-limit
@@ -109,7 +126,9 @@ closes them.
 ## What would most derail an actual launch attempt
 
 In rough order of risk, per the master plan's own "Risks" section:
-1. **Phase 4 (background hardening)** — the biggest unknown, and entirely device-dependent.
+1. **Phase 4 (background hardening)** — the biggest unknown; the battery guide, gap detection,
+   and persistent notification are real code now, but whether they're *enough* is entirely
+   device-dependent and unverified.
 2. **The Google Play 14-day closed test** — a hard calendar constraint; start it early.
 3. **Mapbox Static Images billing** — `FeedMapThumbnail` already isolates this behind one
    component specifically so a switch to on-device rendering doesn't ripple, if cost becomes a

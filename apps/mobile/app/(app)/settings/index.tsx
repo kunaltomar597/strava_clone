@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -87,6 +87,22 @@ export default function SettingsScreen() {
         ))}
         <Button label="Add zone at current location" variant="secondary" loading={addingZone} onPress={handleAddZoneAtCurrentLocation} />
       </View>
+
+      {Platform.OS === "android" ? (
+        <>
+          <Text style={[typeScale.title, { color: colors.textPrimary, marginTop: spacing.xl }]}>Recording</Text>
+          <Text style={[typeScale.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+            Some phone makers stop background apps aggressively, which can cut a recording short.
+          </Text>
+          <View style={{ marginTop: spacing.sm }}>
+            <Button
+              label="Battery optimization"
+              variant="secondary"
+              onPress={() => router.push("/battery-optimization")}
+            />
+          </View>
+        </>
+      ) : null}
 
       <Text style={[typeScale.title, { color: colors.textPrimary, marginTop: spacing.xl }]}>Account</Text>
       <View style={{ marginTop: spacing.sm }}>

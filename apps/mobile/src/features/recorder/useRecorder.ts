@@ -10,11 +10,28 @@ import {
   type SportType,
 } from "@stride/core";
 import type { RecordingEventContract } from "@stride/contracts";
-import { formatDuration, formatPace } from "@/lib/format";
+import { formatDistance, formatDuration, formatPace } from "@/lib/format";
 import { appendEvent, appendFixes, createRecording, loadFixes, updateRecordingState } from "./pointWriter";
 import { nextRecorderState, shouldTrackLocation, type RecorderEvent } from "./stateMachine";
 import type { LocationSource, RecordingState } from "./types";
 import { saveAndUploadActivity, type SaveActivityInput } from "./upload";
+
+/** A detected break in fix delivery long enough to matter — surfaced so the UI can tell the user. */
+export interface RecordingGap {
+  atMs: number;
+  durationS: number;
+}
+
+/**
+ * A gap this much longer than the expected 1Hz cadence is treated as a real
+ * interruption (OS throttling, a tunnel, the JS runtime being killed and
+ * relaunched) rather than one slow fix — see the mount-recovery effect
+ * below for the cold-start case this also catches.
+ */
+const GAP_THRESHOLD_MS = 15_000;
+
+/** How often the Android live-stats notification text is refreshed while recording; see recordingNotification.ts. */
+const NOTIFICATION_UPDATE_INTERVAL_MS = 4000;
 
 export interface UseRecorderResult {
   state: RecordingState;
@@ -24,6 +41,8 @@ export interface UseRecorderResult {
   recordingId: string | null;
   /** The route so far, for LiveMap — grows as fixes arrive, reset on each new recording. */
   routeCoordinates: LatLng[];
+  /** The most recent fix-delivery gap detected, or null; auto-clears a few seconds after it's set. */
+  lastGap: RecordingGap | null;
   openRecord: (sport: SportType) => Promise<void>;
   start: () => Promise<void>;
   pause: () => Promise<void>;
@@ -55,6 +74,7 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
+  const [lastGap, setLastGap] = useState<RecordingGap | null>(null);
 
   const trackerRef = useRef<LiveStatsTracker | null>(null);
   const seqRef = useRef(0);
@@ -64,6 +84,8 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
   stateRef.current = state;
   const nextSplitBoundaryRef = useRef(splitDistanceM);
   const lastSplitMovingTimeSRef = useRef(0);
+  const lastFixTsRef = useRef<number | null>(null);
+  const lastNotificationUpdateAtRef = useRef(0);
 
   const dispatch = useCallback((event: RecorderEvent) => {
     setState((current) => nextRecorderState(current, event) ?? current);
@@ -89,6 +111,9 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
       eventsRef.current = [];
       nextSplitBoundaryRef.current = splitDistanceM;
       lastSplitMovingTimeSRef.current = 0;
+      lastFixTsRef.current = null;
+      lastNotificationUpdateAtRef.current = 0;
+      setLastGap(null);
       await createRecording(id, selectedSport, Date.now());
       dispatch("OPEN_RECORD");
       await source.start(selectedSport);
@@ -104,7 +129,8 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
   const pause = useCallback(async () => {
     dispatch("PAUSE");
     await logEvent("pause");
-  }, [dispatch, logEvent]);
+    await source.updateNotificationText("Paused");
+  }, [dispatch, logEvent, source]);
 
   const resume = useCallback(async () => {
     dispatch("RESUME");
@@ -121,8 +147,14 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
   }, [dispatch, logEvent, source, recordingId]);
 
   const discard = useCallback(async () => {
+    // Reachable either before the recording ever started (from "acquiring",
+    // e.g. the user backs out of "choose a sport") or after finish() has
+    // already stopped the source — calling stop() again there is a no-op,
+    // but skipping it in the first case would leave GPS and the Android
+    // notification running with nothing to show for it.
+    await source.stop();
     dispatch("DISCARD");
-  }, [dispatch]);
+  }, [dispatch, source]);
 
   const save = useCallback(
     async (input: Omit<SaveActivityInput, "activityId" | "sport">) => {
@@ -145,6 +177,10 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
         trackerRef.current.addFix(fix);
       }
       seqRef.current = existing.length;
+      // The next live fix's gap-from-previous is measured against this —
+      // exactly what catches "the app was killed and just relaunched into
+      // an in-progress recording" as a reportable gap, not silently.
+      lastFixTsRef.current = existing[existing.length - 1]!.ts;
     });
     return () => {
       cancelled = true;
@@ -156,10 +192,28 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
       if (!trackerRef.current || !recordingId) return;
       if (!shouldTrackLocation(stateRef.current)) return;
 
+      const previousFixTs = lastFixTsRef.current;
+      lastFixTsRef.current = fix.ts;
+      if (previousFixTs != null) {
+        const gapMs = fix.ts - previousFixTs;
+        if (gapMs > GAP_THRESHOLD_MS) {
+          void logEvent("gap");
+          setLastGap({ atMs: Date.now(), durationS: Math.round(gapMs / 1000) });
+        }
+      }
+
       const snapshot = trackerRef.current.addFix(fix);
       setStats(snapshot);
       setGpsAccuracyM(fix.hAcc ?? null);
       setRouteCoordinates((prev) => [...prev, { lat: fix.lat, lng: fix.lng }]);
+
+      const now = Date.now();
+      if (now - lastNotificationUpdateAtRef.current >= NOTIFICATION_UPDATE_INTERVAL_MS) {
+        lastNotificationUpdateAtRef.current = now;
+        void source.updateNotificationText(
+          `${formatDistance(snapshot.distanceM, "metric")} · ${formatDuration(snapshot.movingTimeS)}`,
+        );
+      }
 
       if (audioCuesEnabled && snapshot.distanceM >= nextSplitBoundaryRef.current) {
         const splitTimeS = snapshot.movingTimeS - lastSplitMovingTimeSRef.current;
@@ -183,7 +237,13 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
       });
     });
     return unsubscribe;
-  }, [source, recordingId, audioCuesEnabled, splitDistanceM]);
+  }, [source, recordingId, audioCuesEnabled, splitDistanceM, logEvent]);
+
+  useEffect(() => {
+    if (!lastGap) return;
+    const timeout = setTimeout(() => setLastGap(null), 8000);
+    return () => clearTimeout(timeout);
+  }, [lastGap]);
 
   return {
     state,
@@ -192,6 +252,7 @@ export function useRecorder(source: LocationSource, options: UseRecorderOptions 
     gpsAccuracyM,
     recordingId,
     routeCoordinates,
+    lastGap,
     openRecord,
     start,
     pause,
