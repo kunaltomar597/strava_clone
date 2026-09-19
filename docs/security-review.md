@@ -18,18 +18,20 @@ added without it. Table-by-table:
 | `activities` | select via `can_view_activity()`, update (owner, column-limited), delete (owner) | `030_activities_rls.test.sql`: followers-only visibility, block override |
 | `activity_streams` | no policy grants access — reachable only via `get_activity_streams()` | Structural only; **[NEEDS HUMAN]** add a test asserting the privacy window is honored for a non-owner |
 | `internal.activity_routes` | no policy grants access; outside `public` so PostgREST can't reach it regardless | Structural only |
-| `activity_photos` | select via `can_view_activity()`, insert/delete (owner) | Not yet covered by pgTAP — **[NEEDS HUMAN or follow-up]** |
-| `privacy_zones` | all (owner only) | Not yet covered by pgTAP |
-| `best_efforts` | select via `can_view_activity()` | Not yet covered by pgTAP |
+| `activity_photos` | select via `can_view_activity()`, insert/delete (owner) | `040_remaining_tables_rls.test.sql`: owner insert/delete, non-owner insert blocked, follower can view |
+| `privacy_zones` | all (owner only) | `040_remaining_tables_rls.test.sql`: owner CRUD, cross-user select returns nothing |
+| `best_efforts` | select via `can_view_activity()` | `040_remaining_tables_rls.test.sql`: follower can see, blocked user cannot, direct client insert rejected |
 | `kudos` | select via `can_view_activity()`, insert (self, viewable, not own activity), delete (own) | `030_activities_rls.test.sql`: idempotent insert, self-kudos blocked |
-| `comments` | select via `can_view_activity()`, insert (self, not blocked by activity owner), update (own, body only), delete (own or activity owner) | Not yet covered by pgTAP |
-| `notifications` | select/update (recipient only, update limited to `read_at`) | Not yet covered by pgTAP |
-| `push_tokens` | all (owner only) | Not yet covered by pgTAP |
-| `reports` | insert (self), select (own) | Not yet covered by pgTAP |
+| `comments` | select via `can_view_activity()`, insert (self, not blocked by activity owner), update (own, body only), delete (own or activity owner) | `040_remaining_tables_rls.test.sql`: follower insert, own-body edit, column-privilege limit, blocked insert rejected, block removes visibility of a user's own prior comment, owner moderate-delete |
+| `notifications` | select/update (recipient only, update limited to `read_at`) | `040_remaining_tables_rls.test.sql`: recipient-only select, `read_at`-only update, column-privilege limit |
+| `push_tokens` | all (owner only) | `040_remaining_tables_rls.test.sql`: cross-user select returns nothing |
+| `reports` | insert (self), select (own) | `040_remaining_tables_rls.test.sql`: cross-user select returns nothing |
 
-**Before the first production release**, extend the pgTAP suite to cover the "not yet covered"
-rows above, especially `activity_photos` and `comments` (both have owner-vs-non-owner-vs-
-blocked-user branches that are easy to get subtly wrong).
+All tables flagged above as previously uncovered now have pgTAP coverage in
+`040_remaining_tables_rls.test.sql`, including the blocking-removes-visibility interaction for
+`comments` and `best_efforts` (blocking hides a user's entire prior interaction history on an
+activity, not just future writes — confirmed against `can_view_activity()`'s intended
+semantics, not a gap).
 
 ## Function security
 
